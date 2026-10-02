@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title','Struk Penjualan')
 @section('content')<div class="card receipt">
-<h2>HALOHA</h2>
+<img class="receipt-logo" src="{{ asset('images/haloha-logo.jpeg') }}" alt="Haloha — Halal, Original, Happiness" width="447" height="447">
 <p>{{ $sale->invoice_number }}<br>{{ $sale->sold_at->format('d/m/Y H:i:s') }} · Kasir {{ $sale->user->name }}</p>
 <div class="scroll">
 <table>
