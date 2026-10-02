@@ -1,0 +1,18 @@
+server {
+    listen 8020;
+    server_name _;
+    root /var/www/haloha-pos/public;
+    index index.php;
+    charset utf-8;
+    client_max_body_size 10M;
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt { access_log off; log_not_found off; }
+    location ~ \.php$ {
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_pass php_haloha_188:9000;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    }
+    location ~ /\.(?!well-known).* { deny all; }
+}
