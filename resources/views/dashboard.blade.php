@@ -27,4 +27,5 @@
 </tr>@endforelse</tbody>
 </table>
 </div>
-</div>@endsection
+</div><div class="card"><h3>Pesanan berjalan</h3>@forelse($pending as $o)<div class="line"><span>{{ $o->invoice_number }} · {{ $o->guest_name ?: 'Tamu' }}<br><small>Kasir {{ $o->cashier_name ?? $o->user->name }}</small></span><b>Rp {{ number_format($o->total,0,',','.') }}</b></div>@empty<p class="muted">Tidak ada pesanan berjalan.</p>@endforelse @permission('pos.view')<a class="btn" href="{{ route('orders.index') }}">Lihat pesanan berjalan</a>@endpermission</div>
+@endsection

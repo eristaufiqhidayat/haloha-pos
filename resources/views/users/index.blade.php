@@ -21,7 +21,7 @@
 <span class="badge {{ !$u->is_active?'warn':'' }}">{{ $u->is_active?'Aktif':'Nonaktif' }}</span>
 </td>
 <td>
-<div class="actions">@permission('users.update')<a class="btn" href="{{ route('users.edit',$u) }}">Ubah</a>@endpermission @permission('users.delete')@if($u->id!==auth()->id())<form method="post" action="{{ route('users.destroy',$u) }}" onsubmit="return confirm('Hapus pengguna ini?')">@csrf @method('DELETE')<button class="danger">Hapus</button>
+<div class="actions">@if(auth()->user()->role->is_system)<a class="btn" href="{{ route('users.access',$u) }}">Atur akses</a>@endif @permission('users.update')<a class="btn" href="{{ route('users.edit',$u) }}">Ubah</a>@endpermission @permission('users.delete')@if($u->id!==auth()->id())<form method="post" action="{{ route('users.destroy',$u) }}" onsubmit="return confirm('Hapus pengguna ini?')">@csrf @method('DELETE')<button class="danger">Hapus</button>
 </form>@endif
 @endpermission</div>
 </td>

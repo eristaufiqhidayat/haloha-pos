@@ -10,6 +10,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UserAccessController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -30,6 +31,14 @@ return view('no-access');
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
     Route::get('/pos', [PosController::class, 'index'])->middleware('permission:pos.view')->name('pos.index');
     Route::post('/pos', [PosController::class, 'store'])->middleware('permission:pos.create')->name('pos.store');
+    Route::get('/orders', [PosController::class, 'orders'])->middleware('permission:pos.view')->name('orders.index');
+    Route::get('/orders/{order}/edit', [PosController::class, 'index'])->middleware('permission:pos.create')->name('orders.edit');
+    Route::put('/orders/{order}', [PosController::class, 'update'])->middleware('permission:pos.create')->name('orders.update');
+    Route::get('/orders/{order}/payment', [PosController::class, 'payment'])->middleware('permission:pos.create')->name('orders.payment');
+    Route::post('/orders/{order}/payment', [PosController::class, 'pay'])->middleware('permission:pos.create')->name('orders.pay');
+    Route::get('/orders/{order}/kitchen', [PosController::class, 'kitchen'])->middleware('permission:pos.view')->name('orders.kitchen');
+    Route::get('/users/{user}/access', [UserAccessController::class, 'edit'])->middleware('permission:users.update')->name('users.access');
+    Route::put('/users/{user}/access', [UserAccessController::class, 'update'])->middleware('permission:users.update')->name('users.access.update');
     Route::get('/sales/{sale}', [PosController::class, 'show'])->name('sales.show');
     foreach (['products' => ProductController::class, 'users' => UserController::class, 'roles' => RoleController::class] as $resource => $controller) {
         Route::resource($resource, $controller)->except('show')->middlewareFor('index', 'permission:'.$resource.'.view')->middlewareFor(['create', 'store'], 'permission:'.$resource.'.create')->middlewareFor(['edit', 'update'], 'permission:'.$resource.'.update')->middlewareFor('destroy', 'permission:'.$resource.'.delete');

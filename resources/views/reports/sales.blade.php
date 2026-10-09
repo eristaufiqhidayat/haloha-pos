@@ -6,7 +6,7 @@
 <button>Tampilkan</button>
 </form>@permission('sales.export')<a class="btn" href="{{ route('reports.sales.export',['date'=>$date]) }}">Ekspor CSV</a>@endpermission</div>@include('partials.stats')<div class="grid">
 <div class="card">
-<h3>Metode pembayaran</h3>@foreach(['cash'=>'Tunai','qris'=>'QRIS','transfer'=>'Transfer'] as $key=>$name)<div class="line">
+<h3>Metode pembayaran</h3>@foreach(['cash'=>'Tunai','qris'=>'QRIS','transfer'=>'Transfer','debit'=>'Debit'] as $key=>$name)<div class="line">
 <span>{{ $name }}</span>
 <b>Rp {{ number_format($report['payments'][$key]??0,0,',','.') }}</b>
 </div>@endforeach</div>
@@ -20,7 +20,8 @@
 <span>Diskon</span>
 <b>Rp {{ number_format($report['discount'],0,',','.') }}</b>
 </div>
-<p class="muted">Laba kotor = omzet setelah diskon − HPP. Belum dikurangi biaya operasional.</p>
+<div class="line"><span>Pajak</span><b>Rp {{ number_format($report['rows']->sum('tax_amount'),0,',','.') }}</b></div>
+<p class="muted">Laba kotor = omzet setelah diskon − pajak − HPP. Belum dikurangi biaya operasional.</p>
 </div>
 </div>
 <div class="card">

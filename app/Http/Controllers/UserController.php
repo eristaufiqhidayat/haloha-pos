@@ -46,7 +46,7 @@ return $data;
 
     public function store(Request $r)
     {
-        User::create($this->data($r));
+        User::create($this->data($r) + ['product_ids' => []]);
 
         return redirect()->route('users.index')->with('success', 'Pengguna dibuat.');
     }

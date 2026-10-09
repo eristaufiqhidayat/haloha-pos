@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'receipt' => ['name' => 'Haloha Kitchen', 'address' => 'Jl. Malaka Baru 4A – Pd Kopi', 'phone' => '0813 6000 9898'],
     'modules' => [
         'dashboard' => ['label' => 'Dashboard', 'actions' => ['view' => 'Lihat']],
         'pos' => ['label' => 'Kasir / POS', 'actions' => ['view' => 'Lihat', 'create' => 'Transaksi']],
