@@ -45,7 +45,7 @@ class HalohaMenuSeederTest extends TestCase
         $this->seed(HalohaMenuSeeder::class);
         $product = Product::where('sku', 'HH-TEA-001')->firstOrFail();
         $product->forceFill(['stock' => 42, 'cost_price' => 3500, 'selling_price' => 9000, 'minimum_stock' => 7, 'is_active' => false, 'name' => 'Nama edit admin'])->save();
-        $before = $product->getAttributes();
+        $before = $product->fresh()->getAttributes();
         $ids = Product::orderBy('id')->pluck('id')->all();
         $this->seed(HalohaMenuSeeder::class);
         $this->assertSame(170, Product::count());
