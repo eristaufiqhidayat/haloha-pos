@@ -18,9 +18,9 @@
 <br>
 <small>{{ $sale->sold_at->format('H:i') }}</small>
 </td>
-<td>{{ $sale->user->name }}</td>
+<td>{{ $sale->cashier_name ?? $sale->user->name }}</td>
 <td>{{ $sale->items->sum('quantity') }}</td>
-<td>{{ ['cash'=>'Tunai','qris'=>'QRIS','transfer'=>'Transfer'][$sale->payment_method] }}</td>
+<td>{{ ['cash'=>'Tunai','qris'=>'QRIS','transfer'=>'Transfer','debit'=>'Debit','split'=>'Split'][$sale->payment_method] }}</td>
 <td>Rp {{ number_format($sale->discount,0,',','.') }}</td>
 <td>
 <b>Rp {{ number_format($sale->total,0,',','.') }}</b>

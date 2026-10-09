@@ -13,9 +13,10 @@
 <a class="brand-link" href="{{ url('/') }}" aria-label="HALOHA POS"><img class="brand-logo" src="{{ asset('images/haloha-logo.jpeg') }}" alt="Haloha — Halal, Original, Happiness" width="447" height="447"></a>
 <small class="brand-caption">Point of Sale</small>
 <nav>
-@foreach(['dashboard'=>['dashboard','Dashboard'],'pos'=>['pos.index','Kasir / POS'],'products'=>['products.index','Produk'],'categories'=>['categories.index','Kategori Produk'],'stock'=>['stock.index','Stok'],'sales'=>['reports.sales','Laporan Penjualan'],'inventory'=>['reports.inventory','Laporan Stok'],'users'=>['users.index','Pengguna'],'roles'=>['roles.index','Kategori Pengguna'],'permissions'=>['permissions.index','Hak Akses']] as $module=>[$route,$label])
+@foreach(['dashboard'=>['dashboard','Dashboard'],'pos'=>['pos.index','Transaksi Baru'],'products'=>['products.index','Produk'],'categories'=>['categories.index','Kategori Produk'],'stock'=>['stock.index','Stok'],'sales'=>['reports.sales','Laporan Penjualan'],'inventory'=>['reports.inventory','Laporan Stok'],'users'=>['users.index','Pengguna'],'roles'=>['roles.index','Kategori Pengguna'],'permissions'=>['permissions.index','Hak Akses']] as $module=>[$route,$label])
 @permission($module.'.view')<a href="{{ route($route) }}" class="{{ request()->routeIs($route) || (in_array($module,['products','users','roles']) && request()->routeIs($module.'.*')) ? 'active' : '' }}">{{ $label }}</a>@endpermission
 @endforeach
+@permission('pos.view')<a href="{{ route('orders.index') }}" class="{{ request()->routeIs('orders.*') ? 'active' : '' }}">Pesanan Berjalan</a>@endpermission
 </nav>
 <div class="aside-user">
 <b>{{ auth()->user()->name }}</b>

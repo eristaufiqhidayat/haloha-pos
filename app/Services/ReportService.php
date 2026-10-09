@@ -19,11 +19,11 @@ class ReportService
     public function sales(string $date): array
     {
         [$start,$end] = $this->range($date);
-        $rows = Sale::with(['user', 'items'])->where('sold_at', '>=', $start)->where('sold_at', '<', $end)->orderByDesc('sold_at')->get();
+        $rows = Sale::with(['user', 'items', 'payments'])->where('status', 'paid')->where('sold_at', '>=', $start)->where('sold_at', '<', $end)->orderByDesc('sold_at')->get();
         $revenue = (int) $rows->sum('total');
         $cost = (int) $rows->sum('total_cost');
 
-        return compact('rows', 'revenue', 'cost') + ['profit' => $revenue - $cost, 'discount' => (int) $rows->sum('discount'), 'quantity' => (int) $rows->sum(fn ($s) => $s->items->sum('quantity')), 'payments' => $rows->groupBy('payment_method')->map->sum('total')];
+        return compact('rows', 'revenue', 'cost') + ['profit' => $revenue - $cost - (int) $rows->sum('tax_amount'), 'discount' => (int) $rows->sum('discount'), 'quantity' => (int) $rows->sum(fn ($s) => $s->items->sum('quantity')), 'payments' => $rows->flatMap->payments->groupBy('method')->map->sum('amount')];
     }
 
     public function inventory(string $date)

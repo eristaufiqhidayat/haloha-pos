@@ -1,0 +1,15 @@
+@extends('layouts.app')
+@section('title','Pembayaran Split')
+@section('content')
+<div class="grid"><section class="card form"><h3>{{ $order->invoice_number }}</h3><p>{{ $order->guest_name ?: 'Tamu' }} · {{ $order->takeaway ? 'Take away' : 'Meja '.$order->table_number }}<br>Kasir {{ $order->cashier_name }}</p><div class="line total"><span>Tagihan</span><b>Rp {{ number_format($order->total,0,',','.') }}</b></div>
+<form method="post" action="{{ route('orders.pay',$order) }}" id="payment-form">@csrf
+<p class="muted">Pilih satu atau beberapa metode. Total nominal harus sama dengan tagihan.</p>
+@foreach(['qris'=>'QRIS','transfer'=>'Transfer','debit'=>'Debit','cash'=>'Tunai'] as $key=>$label)
+<div class="payment-row" data-method="{{ $key }}"><label class="inline-check"><input type="checkbox" class="checkbox method-toggle">{{ $label }}</label><input type="hidden" class="payment-method" value="{{ $key }}"><label>Nominal {{ $label }} (Rp)<input class="payment-amount" type="number" min="0" step="1" max="1000000000000" disabled></label><button type="button" class="fill-rest">Isi sisa</button>
+@if($key==='cash')<label>Uang tunai diterima (Rp)<input class="cash-tender" type="number" min="0" step="1" disabled></label><button type="button" id="exact-cash">Uang pas</button>@else<label class="inline-check"><input type="checkbox" class="checkbox payment-confirm" disabled> {{ $label }} sudah diterima</label>@endif</div>
+@endforeach
+<div class="toolbar" style="margin-top:16px"><button type="button" id="equal-split">Bagi rata metode terpilih</button><button type="button" id="all-methods">Split 4 metode</button></div><div class="line"><span>Total alokasi</span><b id="allocated"></b></div><div class="line"><span>Sisa / kelebihan</span><b id="remainder"></b></div><div class="line"><span>Kembalian tunai</span><b id="cash-change"></b></div><p id="payment-error" role="status" class="muted"></p><button class="primary" id="complete-payment">Selesaikan pembayaran</button><p class="muted">Kasir harus memeriksa bukti QRIS/transfer atau keberhasilan EDC sebelum mencentang konfirmasi.</p></form></section>
+<section class="card"><h3>Rincian pesanan</h3>@foreach($order->items as $i)<div class="line"><span>{{ $i->quantity }} × {{ $i->product_name }}</span><b>Rp {{ number_format($i->subtotal,0,',','.') }}</b></div>@if($i->notes)<p class="muted item-notes">{{ $i->notes }}</p>@endif @endforeach
+<div class="line"><span>Subtotal</span><b>Rp {{ number_format($order->subtotal,0,',','.') }}</b></div>@if($order->discount_enabled)<div class="line"><span>Diskon</span><b>Rp {{ number_format($order->discount,0,',','.') }}</b></div>@endif @if($order->tax_enabled)<div class="line"><span>Pajak {{ $order->tax_rate }}%</span><b>Rp {{ number_format($order->tax_amount,0,',','.') }}</b></div>@endif<a class="btn" href="{{ route('orders.index') }}">Kembali ke pesanan</a></section></div>
+@endsection
+@push('scripts')<script>const paymentTotal=@json($order->total);const previousPayments={{ Illuminate\Support\Js::from(old('payments',[])) }};</script><script src="{{ asset('js/payment.js') }}" defer></script>@endpush

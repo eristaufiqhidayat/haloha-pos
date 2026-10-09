@@ -54,7 +54,7 @@ return $value;
         $date = $this->date($r);
         $report = $service->sales($date);
 
-        return $this->csv('penjualan-'.$date.'.csv', ['Invoice', 'Waktu', 'Kasir', 'Pembayaran', 'Subtotal', 'Diskon', 'Omzet', 'HPP', 'Laba kotor'], $report['rows']->map(fn ($s) => [$s->invoice_number, $s->sold_at->format('Y-m-d H:i:s'), $s->user->name, $s->payment_method, $s->subtotal, $s->discount, $s->total, $s->total_cost, $s->total - $s->total_cost]));
+        return $this->csv('penjualan-'.$date.'.csv', ['Invoice', 'Waktu', 'Kasir', 'Pembayaran', 'Subtotal', 'Diskon', 'Pajak', 'QRIS', 'Transfer', 'Debit', 'Tunai', 'Omzet', 'HPP', 'Laba kotor'], $report['rows']->map(fn ($s) => [$s->invoice_number, $s->sold_at->format('Y-m-d H:i:s'), $s->cashier_name ?? $s->user->name, $s->payment_method, $s->subtotal, $s->discount, $s->tax_amount, $s->payments->where('method', 'qris')->sum('amount'), $s->payments->where('method', 'transfer')->sum('amount'), $s->payments->where('method', 'debit')->sum('amount'), $s->payments->where('method', 'cash')->sum('amount'), $s->total, $s->total_cost, $s->total - $s->total_cost - $s->tax_amount]));
     }
 
     public function exportInventory(Request $r, ReportService $service)
