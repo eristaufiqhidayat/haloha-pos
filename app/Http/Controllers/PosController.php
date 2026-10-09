@@ -18,8 +18,9 @@ class PosController extends Controller
             abort_unless($order->status === 'pending', 409);
             $order->load('items');
         }
+        $catalogUser = $order?->user ?? $r->user();
         $products = Product::with('category')->where('is_active', true)->orderBy('name')->get()
-            ->filter(fn ($p) => $r->user()->role->is_system || $r->user()->product_ids === null || in_array($p->id, $r->user()->product_ids, true));
+            ->filter(fn ($p) => $catalogUser->role->is_system || $catalogUser->product_ids === null || in_array($p->id, $catalogUser->product_ids, true));
         $categories = Category::orderBy('name')->get();
         $checkoutToken = $order?->checkout_token ?? (string) Str::uuid();
         $productData = $products->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'sku' => $p->sku, 'category_id' => $p->category_id, 'price' => $p->selling_price, 'stock' => $p->stock])->values();

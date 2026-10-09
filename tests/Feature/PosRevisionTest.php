@@ -130,4 +130,21 @@ class PosRevisionTest extends TestCase
         $this->get(route('orders.edit', $sale))->assertForbidden();
         $this->get(route('orders.kitchen', $sale))->assertForbidden();
     }
+    public function test_admin_order_edits_keep_original_cashier_catalog_and_identity(): void
+    {
+        $sale = $this->pending();
+        $cashier = $this->cashier();
+        $p = Product::where('sku', 'HL-001')->firstOrFail();
+        $other = Product::where('sku', 'HL-002')->firstOrFail();
+        $cashier->update(['product_ids' => [$p->id]]);
+        $admin = User::where('email', 'admin@haloha.test')->firstOrFail();
+        $this->actingAs($admin)->get(route('orders.edit', $sale))->assertOk()->assertDontSee($other->sku);
+        $data = ['checkout_token' => $sale->checkout_token, 'table_number' => '02', 'items' => [['product_id' => $other->id, 'quantity' => 1]]];
+        $this->putJson(route('orders.update', $sale), $data)->assertUnprocessable();
+        $data['items'][0]['product_id'] = $p->id;
+        $this->put(route('orders.update', $sale), $data)->assertRedirect();
+        $this->assertSame($cashier->id, $sale->fresh()->user_id);
+        $this->assertSame($cashier->name, $sale->fresh()->cashier_name);
+    }
+
 }

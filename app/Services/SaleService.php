@@ -36,10 +36,11 @@ class SaleService
     public function savePending(User $user, array $data, ?Sale $order = null): Sale
     {
         return DB::transaction(function () use ($user, $data, $order) {
-            $user = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $actor = $user;
+            $user = User::whereKey($order?->user_id ?? $user->id)->lockForUpdate()->firstOrFail();
             if ($order) {
                 $order = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
-                abort_unless($order->user_id === $user->id || $user->role->is_system, 403);
+                abort_unless($order->user_id === $actor->id || $actor->role->is_system, 403);
                 if ($order->status !== 'pending') {
                     throw ValidationException::withMessages(['order' => 'Pesanan lunas tidak dapat diubah.']);
                 }
