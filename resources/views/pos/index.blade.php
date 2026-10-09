@@ -22,5 +22,5 @@
 @endsection
 @push('scripts')
 <script>const products={{ Illuminate\Support\Js::from($productData) }};const oldItems={{ Illuminate\Support\Js::from(old('items',$order ? $order->items->map(fn($i)=>['product_id'=>$i->product_id,'quantity'=>$i->quantity,'notes'=>$i->notes])->values()->all() : [])) }};const canTransact=@json(auth()->user()->hasPermission('pos.create'));</script>
-<script src="{{ asset('js/pos.js') }}" defer></script>
+<script src="{{ asset('js/pos.js').'?v='.filemtime(public_path('js/pos.js')) }}" defer></script>
 @endpush
