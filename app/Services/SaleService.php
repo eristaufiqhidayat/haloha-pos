@@ -8,7 +8,6 @@ use App\Models\SaleBill;
 use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class SaleService
@@ -298,11 +297,22 @@ class SaleService
     private function createSale(User $user, array $data, array $fields, string $status): Sale
     {
         return Sale::create($fields + [
-            'invoice_number' => 'INV-'.now()->format('YmdHis').'-'.strtoupper(Str::random(8)),
+            'invoice_number' => $this->nextInvoiceNumber(),
             'checkout_token' => $data['checkout_token'], 'user_id' => $user->id, 'cashier_name' => $user->name,
             'sold_at' => now(), 'status' => $status, 'payment_method' => $status === 'pending' ? 'pending' : 'cash',
             'paid_amount' => 0, 'change_amount' => 0,
         ]);
+    }
+
+    // Format INV-YYYY-MM-DD-NNNN, nomor urut mulai 0001 setiap hari. Harus dipanggil di dalam transaksi.
+    private function nextInvoiceNumber(): string
+    {
+        $date = now()->toDateString();
+        DB::table('invoice_sequences')->insertOrIgnore(['date' => $date, 'last_number' => 0]);
+        $last = DB::table('invoice_sequences')->where('date', $date)->lockForUpdate()->value('last_number');
+        $next = $last + 1;
+        DB::table('invoice_sequences')->where('date', $date)->update(['last_number' => $next]);
+        return 'INV-'.$date.'-'.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     private function payments(array $data, int $total): array
