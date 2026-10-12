@@ -71,21 +71,32 @@ class PosRevisionTest extends TestCase
         $this->assertSame(9000, (int) $payments['debit']);
     }
 
-    public function test_bad_allocations_confirmations_and_cash_are_rejected_atomically(): void
+    public function test_bad_allocations_and_cash_are_rejected_atomically(): void
     {
         $sale = $this->pending();
         $this->actingAs($this->cashier());
-        foreach (['over', 'under', 'duplicate', 'unconfirmed', 'cash'] as $case) {
+        foreach (['over', 'under', 'duplicate', 'cash'] as $case) {
             $data = $this->split($sale->total);
             if ($case === 'over') $data['payments'][0]['amount']++;
             if ($case === 'under') $data['payments'][0]['amount']--;
             if ($case === 'duplicate') $data['payments'][1]['method'] = 'qris';
-            if ($case === 'unconfirmed') $data['payments'][1]['confirmed'] = 0;
             if ($case === 'cash') $data['payments'][3]['paid_amount'] = 1;
             $this->postJson(route('orders.pay', $sale), $data)->assertUnprocessable();
             $this->assertSame('pending', $sale->fresh()->status);
             $this->assertSame(0, $sale->payments()->count());
         }
+    }
+
+    public function test_selected_non_cash_methods_count_as_received_without_confirmation(): void
+    {
+        $sale = $this->pending();
+        $this->actingAs($this->cashier());
+        $this->get(route('orders.payment', $sale))->assertOk()->assertDontSee('sudah diterima</label>', false)->assertSee('langsung dicatat sebagai sudah diterima');
+        $data = $this->split($sale->total);
+        foreach ($data['payments'] as &$row) unset($row['confirmed']);
+        $this->post(route('orders.pay', $sale), $data)->assertRedirect(route('sales.show', $sale));
+        $this->assertSame('paid', $sale->fresh()->status);
+        $this->assertSame(4, $sale->payments()->count());
     }
 
     public function test_tax_discount_flags_and_item_specific_notes(): void
