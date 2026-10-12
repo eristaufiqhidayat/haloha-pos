@@ -2,6 +2,7 @@
 @section('title',$order ? 'Ubah Pesanan' : 'Transaksi Baru')
 @section('content')
 <p class="muted">Kasir: <b>{{ $order?->cashier_name ?? auth()->user()->name }}</b> · Menu sesuai akses yang diberikan admin.</p>
+@if($order?->isSplit())<div class="alert error">Pesanan ini sudah dibagi menjadi beberapa tagihan. Menyimpan perubahan akan menghapus pembagian, lalu split bill perlu diatur ulang.</div>@endif
 <div class="split">
 <section><div class="toolbar"><input id="search" style="flex:1" placeholder="Cari produk atau SKU" aria-label="Cari produk"><select id="category" aria-label="Kategori"><option value="">Semua kategori</option>@foreach($categories as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach</select></div><div class="products" id="products"></div></section>
 <section class="card form"><div class="sectiontitle"><h3>Pesanan</h3><button type="button" id="clear">Kosongkan</button></div>

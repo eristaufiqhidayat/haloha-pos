@@ -28,6 +28,21 @@ class Sale extends Model
         return $this->hasMany(SaleItem::class);
     }
 
+    public function bills()
+    {
+        return $this->hasMany(SaleBill::class)->orderBy('number');
+    }
+
+    public function isSplit(): bool
+    {
+        return $this->split_mode !== null;
+    }
+
+    public function hasPaidBill(): bool
+    {
+        return $this->bills()->where('status', 'paid')->exists();
+    }
+
     public static function kitchenStation(string $key): ?array
     {
         $station = config("pos.kitchen_stations.$key");
@@ -37,6 +52,8 @@ class Sale extends Model
     public function kitchenItems(array $station)
     {
         $keywords = array_map('mb_strtolower', $station['keywords'] ?? []);
-        return $this->items->filter(fn ($i) => $keywords === [] || collect($keywords)->contains(fn ($k) => str_contains(mb_strtolower($i->product_name), $k)))->values();
+        return $this->items->filter(fn ($i) => $keywords === [] || collect($keywords)->contains(fn ($k) => str_contains(mb_strtolower($i->product_name), $k)))
+            // Split per item memecah baris menu antar tagihan; dapur tetap melihat satu baris per menu + catatan.
+            ->groupBy(fn ($i) => $i->product_id.'|'.$i->notes)->map(fn ($rows) => tap(clone $rows->first(), fn ($i) => $i->quantity = $rows->sum('quantity')))->values();
     }
 }
