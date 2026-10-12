@@ -120,7 +120,7 @@ class SaleService
                     }
                     foreach ($rows as $n => $qty) {
                         $sale->items()->create(['sale_bill_id' => $bills[$n]->id, 'quantity' => $qty, 'subtotal' => $item->unit_price * $qty, 'total_cost' => $item->unit_cost * $qty]
-                            + $item->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes'));
+                            + $item->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes', 'takeaway'));
                         $subtotals[$n] += $item->unit_price * $qty;
                         $units[$n] += $qty;
                     }
@@ -232,7 +232,7 @@ class SaleService
         foreach ($items->groupBy->splitKey() as $rows) {
             $qty = (int) $rows->sum('quantity');
             $sale->items()->create(['quantity' => $qty, 'subtotal' => (int) $rows->sum('subtotal'), 'total_cost' => (int) $rows->sum('total_cost')]
-                + $rows->first()->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes'));
+                + $rows->first()->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes', 'takeaway'));
         }
         $sale->update(['split_mode' => null]);
     }
@@ -241,6 +241,8 @@ class SaleService
     {
         $rows = [];
         $quantities = [];
+        // Klien lama hanya mengirim take away per pesanan; dipakai sebagai nilai awal tiap menu.
+        $orderTakeaway = (bool) ($data['takeaway'] ?? false);
         foreach ($data['items'] as $row) {
             $id = (int) $row['product_id'];
             $qty = (int) $row['quantity'];
@@ -248,9 +250,10 @@ class SaleService
             if (! $user->maySellProduct($id)) {
                 throw ValidationException::withMessages(['items' => 'Menu belum diizinkan oleh admin untuk kasir ini.']);
             }
+            $takeaway = (bool) ($row['takeaway'] ?? $orderTakeaway);
             $quantities[$id] = ($quantities[$id] ?? 0) + $qty;
-            $key = $id.'|'.$notes;
-            $rows[$key] ??= ['product_id' => $id, 'quantity' => 0, 'notes' => $notes];
+            $key = $id.'|'.$notes.'|'.(int) $takeaway;
+            $rows[$key] ??= ['product_id' => $id, 'quantity' => 0, 'notes' => $notes, 'takeaway' => $takeaway];
             $rows[$key]['quantity'] += $qty;
         }
         ksort($quantities);
@@ -281,7 +284,8 @@ class SaleService
         $taxEnabled = (bool) ($data['tax_enabled'] ?? false);
         $rate = $taxEnabled ? (int) ($data['tax_rate'] ?? 0) : 0;
         $tax = (int) round(($subtotal - $discount) * $rate / 100);
-        $takeaway = (bool) ($data['takeaway'] ?? false);
+        // Pesanan dianggap take away hanya bila semua menunya take away; selain itu tetap pakai meja.
+        $takeaway = ! in_array(false, array_column($rows, 'takeaway'), true);
         return [[
             'subtotal' => $subtotal, 'discount' => $discount, 'discount_enabled' => $discountEnabled,
             'tax_enabled' => $taxEnabled, 'tax_rate' => $rate, 'tax_amount' => $tax,

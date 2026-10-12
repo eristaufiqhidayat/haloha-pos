@@ -9,7 +9,7 @@
 <div class="split"><section class="card">
 <div id="item-mode"><p class="muted">Pilih tagihan aktif, lalu ketuk kotak porsi untuk memasukkan porsi itu ke tagihan tersebut. Ketuk lagi untuk mengeluarkannya.</p><div class="chips" id="split-chips"></div><div id="split-items"></div></div>
 <div id="equal-mode" hidden><h3>Bagi rata</h3><p class="muted">Total pesanan dibagi sama besar ke setiap tagihan. Selisih pembulatan rupiah masuk ke tagihan awal. Struk tiap tagihan mencantumkan seluruh item.</p>
-@foreach($order->items->groupBy->splitKey() as $rows)<div class="line"><span>{{ $rows->sum('quantity') }} × {{ $rows->first()->product_name }}</span><span>Rp {{ number_format($rows->sum('subtotal'),0,',','.') }}</span></div>@endforeach</div>
+@foreach($order->items->groupBy->splitKey() as $rows)<div class="line"><span>{{ $rows->sum('quantity') }} × {{ $rows->first()->product_name }}@if($rows->first()->takeaway && ! $order->takeaway) [TA]@endif</span><span>Rp {{ number_format($rows->sum('subtotal'),0,',','.') }}</span></div>@endforeach</div>
 </section>
 <section class="card split-summary"><h3>Ringkasan tagihan</h3><div id="split-status" role="status"></div><div class="bills" id="split-bills"></div>
 <div class="actions"><a class="btn" href="{{ route('orders.index') }}">Batal</a><button class="primary" id="split-save">Simpan pembagian</button></div>
@@ -18,6 +18,6 @@
 @if($order->isSplit())<form method="post" action="{{ route('orders.split.destroy',$order) }}" class="toolbar" style="margin-top:12px">@csrf @method('DELETE')<button class="danger">Batalkan split, kembali ke satu tagihan</button></form>@endif
 @endsection
 @push('scripts')<script>const splitData={{ Illuminate\Support\Js::from([
-    'items' => $items, 'max' => $max, 'subtotal' => $order->subtotal, 'discount' => $order->discount, 'tax' => $order->tax_amount, 'total' => $order->total,
+    'items' => $items, 'mixed' => $order->isMixedTakeaway(), 'max' => $max, 'subtotal' => $order->subtotal, 'discount' => $order->discount, 'tax' => $order->tax_amount, 'total' => $order->total,
     'count' => (int) old('count', max(2, $order->bills->count())), 'labels' => old('labels', $order->bills->pluck('label', 'number')),
 ]) }};</script><script src="{{ asset('js/split.js').'?v='.filemtime(public_path('js/split.js')) }}" defer></script>@endpush

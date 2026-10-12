@@ -36,13 +36,29 @@ class PosController extends Controller
         return $r->validate([
             'checkout_token' => 'required|uuid', 'items' => 'required|array|min:1|max:100',
             'items.*.product_id' => 'required|integer|exists:products,id', 'items.*.quantity' => 'required|integer|min:1|max:10000', 'items.*.notes' => 'nullable|string|max:600',
-            'guest_name' => 'nullable|string|max:100', 'takeaway' => 'nullable|boolean',
-            'table_number' => ($pending ? 'required_unless:takeaway,1|' : 'nullable|').'string|max:30',
+            'items.*.takeaway' => 'nullable|boolean', 'guest_name' => 'nullable|string|max:100', 'takeaway' => 'nullable|boolean',
+            'table_number' => ($pending && ! $this->allTakeaway($r) ? 'required|' : 'nullable|').'string|max:30',
             'discount_enabled' => 'nullable|boolean', 'discount' => 'nullable|integer|min:0|max:1000000000000',
             'tax_enabled' => 'nullable|boolean', 'tax_rate' => 'nullable|integer|min:0|max:100',
             'payment_method' => ($pending ? 'nullable' : 'required').'|in:cash,qris,transfer,debit',
             'paid_amount' => 'nullable|integer|min:0|max:1000000000000', 'confirmed' => $pending ? 'nullable' : 'accepted',
         ]);
+    }
+
+    /** Nomor meja hanya boleh kosong bila semua menu take away. */
+    private function allTakeaway(Request $r): bool
+    {
+        $items = $r->input('items');
+        if (! is_array($items) || $items === []) {
+            return $r->boolean('takeaway');
+        }
+        foreach ($items as $row) {
+            $value = is_array($row) && array_key_exists('takeaway', $row) ? $row['takeaway'] : $r->input('takeaway');
+            if (! filter_var($value, FILTER_VALIDATE_BOOLEAN)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public function store(Request $r, SaleService $service)
@@ -107,7 +123,7 @@ class PosController extends Controller
         }
         // Editor memakai baris menu gabungan; pembagian lama (jika ada) dimuat sebagai nilai awal.
         $items = $order->items->groupBy->splitKey()->map(fn ($rows) => [
-            'key' => $rows->first()->splitKey(), 'name' => $rows->first()->product_name, 'notes' => $rows->first()->notes, 'price' => $rows->first()->unit_price,
+            'key' => $rows->first()->splitKey(), 'name' => $rows->first()->product_name, 'notes' => $rows->first()->notes, 'takeaway' => $rows->first()->takeaway, 'price' => $rows->first()->unit_price,
             'qty' => (int) $rows->sum('quantity'), 'alloc' => $rows->filter->sale_bill_id->groupBy(fn ($i) => $order->bills->firstWhere('id', $i->sale_bill_id)->number)->map->sum('quantity'),
         ])->values();
         return view('pos.split', ['order' => $order, 'items' => $items, 'max' => SaleBill::MAX]);
