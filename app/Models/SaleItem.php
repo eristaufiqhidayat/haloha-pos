@@ -10,6 +10,11 @@ class SaleItem extends Model
 
     protected $guarded = ['id'];
 
+    protected function casts(): array
+    {
+        return ['takeaway' => 'boolean'];
+    }
+
     public function sale()
     {
         return $this->belongsTo(Sale::class);
@@ -18,7 +23,7 @@ class SaleItem extends Model
     /** Kunci baris menu yang tetap sama walau baris dipecah/digabung antar tagihan. */
     public function splitKey(): string
     {
-        return md5($this->product_id.'|'.$this->unit_price.'|'.$this->notes);
+        return md5($this->product_id.'|'.$this->unit_price.'|'.$this->notes.'|'.(int) $this->takeaway);
     }
 
     public function bill()

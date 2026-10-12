@@ -9,7 +9,7 @@
 <form method="post" action="{{ $order ? route('orders.update',$order) : route('pos.store') }}" id="checkout">@csrf @if($order)@method('PUT')@endif
 <input type="hidden" name="action" value="pending"><input type="hidden" name="checkout_token" value="{{ old('checkout_token',$checkoutToken) }}">
 <div class="grid"><label>Nama tamu<input name="guest_name" maxlength="100" value="{{ old('guest_name',$order?->guest_name) }}" placeholder="Nama tamu"></label><label>Nomor meja<input name="table_number" id="table-number" maxlength="30" value="{{ old('table_number',$order?->table_number) }}" placeholder="01"></label></div>
-<input type="hidden" name="takeaway" value="0"><label class="inline-check"><input class="checkbox" name="takeaway" id="takeaway" type="checkbox" value="1" @checked(old('takeaway',$order?->takeaway))> Take away</label>
+<input type="hidden" name="takeaway" value="0"><label class="inline-check"><input class="checkbox" name="takeaway" id="takeaway" type="checkbox" value="1" @checked(old('takeaway',$order?->takeaway))> Semua take away</label><p class="muted" id="takeaway-hint">Pilih Makan di sini atau Take away di setiap menu. Nomor meja wajib selama masih ada menu makan di sini.</p>
 <div id="cart"></div><div id="items"></div>
 <div class="line"><span>Subtotal</span><b id="subtotal"></b></div>
 <input type="hidden" name="discount_enabled" value="0"><label class="inline-check"><input class="checkbox" name="discount_enabled" id="discount-enabled" type="checkbox" value="1" @checked(old('discount_enabled',$order?->discount_enabled))> Gunakan diskon</label>
@@ -22,6 +22,6 @@
 <dialog id="notes-modal" class="pos-dialog"><form method="dialog"><div class="sectiontitle"><h3>Notes per menu</h3><button value="cancel">Tutup</button></div></form><p id="notes-menu"></p><label class="form">Catatan<textarea id="notes-text" rows="4" maxlength="600" style="width:100%" placeholder="Tidak pedas, tanpa bawang, sedikit es"></textarea></label><p class="muted">Catatan berlaku untuk jumlah pada baris menu ini.</p><button type="button" class="primary" id="notes-save">Simpan catatan</button></dialog>
 @endsection
 @push('scripts')
-<script>const products={{ Illuminate\Support\Js::from($productData) }};const oldItems={{ Illuminate\Support\Js::from(old('items',$order ? $order->items->map(fn($i)=>['product_id'=>$i->product_id,'quantity'=>$i->quantity,'notes'=>$i->notes])->values()->all() : [])) }};const canTransact=@json(auth()->user()->hasPermission('pos.create'));</script>
+<script>const products={{ Illuminate\Support\Js::from($productData) }};const oldItems={{ Illuminate\Support\Js::from(old('items',$order ? $order->items->map(fn($i)=>['product_id'=>$i->product_id,'quantity'=>$i->quantity,'notes'=>$i->notes,'takeaway'=>$i->takeaway])->values()->all() : [])) }};const canTransact=@json(auth()->user()->hasPermission('pos.create'));</script>
 <script src="{{ asset('js/pos.js').'?v='.filemtime(public_path('js/pos.js')) }}" defer></script>
 @endpush

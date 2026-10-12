@@ -43,6 +43,23 @@ class Sale extends Model
         return $this->bills()->where('status', 'paid')->exists();
     }
 
+    /** Jumlah porsi take away; dipakai untuk menandai pesanan campuran. */
+    public function takeawayQuantity(): int
+    {
+        return (int) $this->items->where('takeaway', true)->sum('quantity');
+    }
+
+    public function isMixedTakeaway(): bool
+    {
+        return ! $this->takeaway && $this->takeawayQuantity() > 0;
+    }
+
+    /** Label tempat pesanan: "Take away", "Meja 05", atau "Meja 05 · ada take away". */
+    public function placeLabel(): string
+    {
+        return $this->takeaway ? 'Take away' : 'Meja '.($this->table_number ?: '—').($this->isMixedTakeaway() ? ' · ada take away' : '');
+    }
+
     public static function kitchenStation(string $key): ?array
     {
         $station = config("pos.kitchen_stations.$key");
@@ -54,6 +71,6 @@ class Sale extends Model
         $keywords = array_map('mb_strtolower', $station['keywords'] ?? []);
         return $this->items->filter(fn ($i) => $keywords === [] || collect($keywords)->contains(fn ($k) => str_contains(mb_strtolower($i->product_name), $k)))
             // Split per item memecah baris menu antar tagihan; dapur tetap melihat satu baris per menu + catatan.
-            ->groupBy(fn ($i) => $i->product_id.'|'.$i->notes)->map(fn ($rows) => tap(clone $rows->first(), fn ($i) => $i->quantity = $rows->sum('quantity')))->values();
+            ->groupBy(fn ($i) => $i->product_id.'|'.$i->notes.'|'.(int) $i->takeaway)->map(fn ($rows) => tap(clone $rows->first(), fn ($i) => $i->quantity = $rows->sum('quantity')))->values();
     }
 }

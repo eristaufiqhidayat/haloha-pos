@@ -7,11 +7,12 @@ const state={mode:get('split-mode').value==='equal'?'equal':'item',count:Math.mi
 for(const [n,l] of Object.entries(d.labels||{}))state.labels[n]=l||'';
 // alloc[i][bill]=qty per baris menu
 const alloc=d.items.map(it=>{const a={};for(const [n,q] of Object.entries(it.alloc||{}))a[n]=q;return a;});
+const itemName=it=>it.name+(d.mixed&&it.takeaway?' [TA]':'');
 const assigned=i=>Object.values(alloc[i]).reduce((s,q)=>s+q,0);
 function allocate(total,weights){const sum=weights.reduce((a,b)=>a+b,0);if(sum<=0)return weights.map(()=>0);const base=weights.map(w=>Math.floor(total*w/sum));let rest=total-base.reduce((a,b)=>a+b,0);weights.map((w,i)=>[(total*w)%sum,i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).forEach(([,i])=>{if(rest>0){base[i]++;rest--;}});return base;}
 function bills(){
   const n=state.count,list=Array.from({length:n},(_,k)=>({no:k+1,lines:[],units:0,subtotal:0}));
-  if(state.mode==='item')d.items.forEach((it,i)=>{for(const [b,q] of Object.entries(alloc[i])){if(!q||b>n)continue;const bill=list[b-1];bill.lines.push(q+' × '+it.name);bill.units+=q;bill.subtotal+=q*it.price;}});
+  if(state.mode==='item')d.items.forEach((it,i)=>{for(const [b,q] of Object.entries(alloc[i])){if(!q||b>n)continue;const bill=list[b-1];bill.lines.push(q+' × '+itemName(it));bill.units+=q;bill.subtotal+=q*it.price;}});
   if(state.mode==='item'){const sub=list.map(b=>b.subtotal),disc=allocate(d.discount,sub),tax=allocate(d.tax,sub.map((s,k)=>s-disc[k]));list.forEach((b,k)=>{b.discount=disc[k];b.tax=tax[k];b.total=sub[k]-disc[k]+tax[k];});}
   else{const eq=list.map(()=>1),tot=allocate(d.total,eq),disc=allocate(d.discount,eq),tax=allocate(d.tax,eq);list.forEach((b,k)=>{b.total=tot[k];b.discount=disc[k];b.tax=tax[k];b.subtotal=tot[k]+disc[k]-tax[k];});}
   return list;
@@ -32,7 +33,7 @@ function render(){
   get('mode-item').setAttribute('aria-pressed',state.mode==='item');get('mode-equal').setAttribute('aria-pressed',state.mode==='equal');
   get('item-mode').hidden=state.mode!=='item';get('equal-mode').hidden=state.mode!=='equal';
   get('split-chips').innerHTML=Array.from({length:state.count},(_,k)=>`<button type="button" class="chip" style="background:${COLORS[k]}" aria-pressed="${state.active===k+1}" data-act="active" data-b="${k+1}">T${k+1}${state.labels[k+1]?' · '+esc(state.labels[k+1]):''}</button>`).join('');
-  get('split-items').innerHTML=d.items.map((it,i)=>{const free=it.qty-assigned(i);return `<div class="split-item"><div class="sectiontitle"><div><b>${it.qty} × ${esc(it.name)}</b>${it.notes?`<p class="muted item-notes">${esc(it.notes)}</p>`:''}</div><span class="muted">${rupiah(it.price)} / porsi</span></div><div class="units">${unitsHtml(it,i)}${free?`<button type="button" data-act="rest" data-i="${i}">Sisa ${free} ke T${state.active}</button>`:''}</div></div>`;}).join('');
+  get('split-items').innerHTML=d.items.map((it,i)=>{const free=it.qty-assigned(i);return `<div class="split-item"><div class="sectiontitle"><div><b>${it.qty} × ${esc(itemName(it))}</b>${it.notes?`<p class="muted item-notes">${esc(it.notes)}</p>`:''}</div><span class="muted">${rupiah(it.price)} / porsi</span></div><div class="units">${unitsHtml(it,i)}${free?`<button type="button" data-act="rest" data-i="${i}">Sisa ${free} ke T${state.active}</button>`:''}</div></div>`;}).join('');
   const list=bills(),free=d.items.reduce((s,it,i)=>s+it.qty-assigned(i),0),empty=state.mode==='item'?list.filter(b=>!b.units).map(b=>'T'+b.no):[];
   let msg;if(state.mode==='item'&&free)msg=`<div class="alert error">${free} porsi belum masuk tagihan mana pun.</div>`;else if(empty.length)msg=`<div class="alert error">${empty.join(', ')} masih kosong. Isi atau kurangi jumlah tagihan.</div>`;else msg=`<div class="alert">Semua porsi terbagi. Jumlah ${state.count} tagihan = ${rupiah(list.reduce((s,b)=>s+b.total,0))}.</div>`;
   get('split-status').innerHTML=msg;get('split-save').disabled=state.mode==='item'&&(free>0||empty.length>0);
