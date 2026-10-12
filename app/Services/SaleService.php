@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SaleBill;
 use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,9 @@ class SaleService
                 if ($order->status !== 'pending') {
                     throw ValidationException::withMessages(['order' => 'Pesanan lunas tidak dapat diubah.']);
                 }
+                if ($order->hasPaidBill()) {
+                    throw ValidationException::withMessages(['order' => 'Sebagian tagihan sudah lunas. Pesanan tidak dapat diubah.']);
+                }
             } else {
                 $existing = Sale::where('checkout_token', $data['checkout_token'])->first();
                 if ($existing) {
@@ -53,8 +57,10 @@ class SaleService
             }
             [$fields, $items] = $this->snapshot($user, $data);
             if ($order) {
-                $order->update($fields);
+                // Isi pesanan berubah, jadi pembagian tagihan lama tidak berlaku lagi.
+                $order->update($fields + ['split_mode' => null]);
                 $order->items()->delete();
+                $order->bills()->delete();
             } else {
                 $order = $this->createSale($user, $data, $fields, 'pending');
             }
@@ -76,10 +82,159 @@ class SaleService
             if ($sale->status !== 'pending') {
                 throw ValidationException::withMessages(['order' => 'Pesanan tidak dapat dibayar.']);
             }
+            if ($sale->isSplit()) {
+                throw ValidationException::withMessages(['order' => 'Pesanan sudah dibagi. Bayar per tagihan.']);
+            }
             $payments = $this->payments($data, $sale->total);
             $this->settle($sale, $payments, $actor, $owner);
             return $sale->load('items', 'payments');
         }, 3);
+    }
+
+    /**
+     * Bagi pesanan berjalan menjadi 2..15 tagihan. Mode 'item' memindahkan porsi menu ke tagihan
+     * ($data['alloc'][SaleItem::splitKey()][nomor tagihan] = jumlah); mode 'equal' membagi total sama rata.
+     */
+    public function split(User $actor, Sale $order, array $data): Sale
+    {
+        return DB::transaction(function () use ($actor, $order, $data) {
+            User::whereKey($order->user_id)->lockForUpdate()->firstOrFail();
+            $sale = $this->lockOpenOrder($actor, $order);
+            $this->mergeItems($sale);
+            $count = (int) $data['count'];
+            $labels = $data['labels'] ?? [];
+            $items = $sale->items()->orderBy('id')->get();
+            $bills = collect(range(1, $count))->map(fn ($n) => $sale->bills()->create([
+                'number' => $n, 'label' => trim((string) ($labels[$n] ?? '')) ?: null, 'subtotal' => 0, 'total' => 0,
+            ]))->keyBy('number');
+            if ($data['mode'] === 'item') {
+                $alloc = $data['alloc'] ?? [];
+                $subtotals = $units = array_fill(1, $count, 0);
+                if (array_diff(array_keys($alloc), $items->map->splitKey()->all())) {
+                    throw ValidationException::withMessages(['alloc' => 'Item pembagian tidak sesuai pesanan. Muat ulang halaman.']);
+                }
+                foreach ($items as $item) {
+                    $rows = array_filter(array_map('intval', $alloc[$item->splitKey()] ?? []));
+                    if (array_sum($rows) !== $item->quantity || min($rows ?: [-1]) < 0 || array_diff(array_keys($rows), range(1, $count))) {
+                        throw ValidationException::withMessages(['alloc' => 'Semua porsi '.$item->product_name.' harus masuk ke tagihan.']);
+                    }
+                    foreach ($rows as $n => $qty) {
+                        $sale->items()->create(['sale_bill_id' => $bills[$n]->id, 'quantity' => $qty, 'subtotal' => $item->unit_price * $qty, 'total_cost' => $item->unit_cost * $qty]
+                            + $item->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes'));
+                        $subtotals[$n] += $item->unit_price * $qty;
+                        $units[$n] += $qty;
+                    }
+                    $item->delete();
+                }
+                if (in_array(0, $units, true)) {
+                    throw ValidationException::withMessages(['alloc' => 'Setiap tagihan harus berisi minimal satu porsi.']);
+                }
+                $weights = array_values($subtotals);
+            } else {
+                $weights = array_fill(0, $count, 1);
+            }
+            if ($data['mode'] === 'item') {
+                $subtotal = $weights;
+                $discount = self::allocate($sale->discount, $subtotal);
+                $tax = self::allocate($sale->tax_amount, array_map(fn ($a, $b) => $a - $b, $subtotal, $discount));
+                $total = array_map(fn ($s, $d, $t) => $s - $d + $t, $subtotal, $discount, $tax);
+            } else {
+                // Bagi rata: total yang dibagi rata, selisih pembulatan masuk ke tagihan awal.
+                $total = self::allocate($sale->total, $weights);
+                $discount = self::allocate($sale->discount, $weights);
+                $tax = self::allocate($sale->tax_amount, $weights);
+                $subtotal = array_map(fn ($t, $d, $x) => $t + $d - $x, $total, $discount, $tax);
+            }
+            foreach ($bills->values() as $i => $bill) {
+                $bill->update(['subtotal' => $subtotal[$i], 'discount' => $discount[$i], 'tax_amount' => $tax[$i], 'total' => $total[$i]]);
+            }
+            $sale->update(['split_mode' => $data['mode']]);
+            return $sale->load('bills', 'items');
+        }, 3);
+    }
+
+    public function unsplit(User $actor, Sale $order): Sale
+    {
+        return DB::transaction(function () use ($actor, $order) {
+            User::whereKey($order->user_id)->lockForUpdate()->firstOrFail();
+            $sale = $this->lockOpenOrder($actor, $order);
+            $this->mergeItems($sale);
+            return $sale->load('items');
+        }, 3);
+    }
+
+    public function payBill(User $actor, Sale $order, int $number, array $data): SaleBill
+    {
+        return DB::transaction(function () use ($actor, $order, $number, $data) {
+            $owner = User::whereKey($order->user_id)->lockForUpdate()->firstOrFail();
+            $sale = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            abort_unless($sale->user_id === $actor->id || $actor->role->is_system, 403);
+            $bill = $sale->bills()->where('number', $number)->lockForUpdate()->firstOrFail();
+            if ($bill->isPaid()) {
+                return $bill->load('payments');
+            }
+            if ($sale->status !== 'pending') {
+                throw ValidationException::withMessages(['order' => 'Pesanan tidak dapat dibayar.']);
+            }
+            $payments = $this->payments($data, $bill->total);
+            // Stok dipotong saat tagihan pertama lunas, agar tagihan berikutnya tidak bisa gagal karena stok.
+            if (! $sale->hasPaidBill()) {
+                $this->deductStock($sale, $actor, $owner);
+            }
+            $sale->payments()->createMany(array_map(fn ($p) => $p + ['sale_bill_id' => $bill->id, 'bill_number' => $bill->number], $payments));
+            $bill->update(['status' => 'paid', 'paid_at' => now(), 'paid_by' => $actor->id, 'payment_method' => count($payments) === 1 ? $payments[0]['method'] : 'split',
+                'paid_amount' => array_sum(array_column($payments, 'paid_amount')), 'change_amount' => array_sum(array_column($payments, 'change_amount'))]);
+            if (! $sale->bills()->where('status', '!=', 'paid')->exists()) {
+                $all = $sale->payments()->get();
+                $sale->update(['status' => 'paid', 'sold_at' => now(), 'payment_method' => $all->pluck('method')->unique()->count() === 1 ? $all->first()->method : 'split',
+                    'paid_amount' => (int) $all->sum('paid_amount'), 'change_amount' => (int) $all->sum('change_amount')]);
+            }
+            return $bill->load('payments');
+        }, 3);
+    }
+
+    /** Bagi $total ke bobot dengan metode sisa terbesar; hasil selalu berjumlah tepat $total. */
+    public static function allocate(int $total, array $weights): array
+    {
+        $weights = array_values($weights);
+        $sum = array_sum($weights);
+        if ($sum <= 0) {
+            return array_fill(0, count($weights), 0);
+        }
+        $base = array_map(fn ($w) => intdiv($total * $w, $sum), $weights);
+        $order = array_keys($weights);
+        usort($order, fn ($a, $b) => (($total * $weights[$b]) % $sum) <=> (($total * $weights[$a]) % $sum) ?: $a <=> $b);
+        for ($i = 0, $rest = $total - array_sum($base); $i < $rest; $i++) {
+            $base[$order[$i]]++;
+        }
+        return $base;
+    }
+
+    private function lockOpenOrder(User $actor, Sale $order): Sale
+    {
+        $sale = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
+        abort_unless($sale->user_id === $actor->id || $actor->role->is_system, 403);
+        if ($sale->status !== 'pending' || $sale->hasPaidBill()) {
+            throw ValidationException::withMessages(['order' => 'Pembagian tidak dapat diubah setelah ada tagihan lunas.']);
+        }
+        return $sale;
+    }
+
+    /** Hapus pembagian lama dan satukan kembali baris menu yang terpecah antar tagihan. */
+    private function mergeItems(Sale $sale): void
+    {
+        if (! $sale->isSplit()) {
+            return;
+        }
+        $items = $sale->items()->orderBy('id')->get();
+        $sale->items()->delete();
+        $sale->bills()->delete();
+        foreach ($items->groupBy->splitKey() as $rows) {
+            $qty = (int) $rows->sum('quantity');
+            $sale->items()->create(['quantity' => $qty, 'subtotal' => (int) $rows->sum('subtotal'), 'total_cost' => (int) $rows->sum('total_cost')]
+                + $rows->first()->only('product_id', 'product_name', 'sku', 'unit_price', 'unit_cost', 'notes'));
+        }
+        $sale->update(['split_mode' => null]);
     }
 
     private function snapshot(User $user, array $data): array
@@ -182,6 +337,14 @@ class SaleService
 
     private function settle(Sale $sale, array $payments, User $actor, ?User $owner = null): void
     {
+        $this->deductStock($sale, $actor, $owner, function () use ($sale, $payments) {
+            $sale->payments()->createMany($payments);
+            $sale->update(['status' => 'paid', 'sold_at' => now(), 'payment_method' => count($payments) === 1 ? $payments[0]['method'] : 'split', 'paid_amount' => array_sum(array_column($payments, 'paid_amount')), 'change_amount' => array_sum(array_column($payments, 'change_amount'))]);
+        });
+    }
+
+    private function deductStock(Sale $sale, User $actor, ?User $owner = null, ?callable $beforeDeduct = null): void
+    {
         $quantities = $sale->items()->get()->groupBy('product_id')->map->sum('quantity')->sortKeys();
         $products = Product::whereIn('id', $quantities->keys())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
         foreach ($quantities as $id => $qty) {
@@ -190,13 +353,14 @@ class SaleService
                 throw ValidationException::withMessages(['items' => 'Stok atau akses menu pesanan telah berubah. Periksa pesanan sebelum membayar.']);
             }
         }
-        $sale->payments()->createMany($payments);
-        $sale->update(['status' => 'paid', 'sold_at' => now(), 'payment_method' => count($payments) === 1 ? $payments[0]['method'] : 'split', 'paid_amount' => array_sum(array_column($payments, 'paid_amount')), 'change_amount' => array_sum(array_column($payments, 'change_amount'))]);
+        if ($beforeDeduct) {
+            $beforeDeduct();
+        }
         foreach ($quantities as $id => $qty) {
             $p = $products[$id];
             $p->stock -= $qty;
             $p->save();
-            StockMovement::create(['product_id' => $id, 'user_id' => $actor->id, 'sale_id' => $sale->id, 'type' => 'sale', 'quantity' => -$qty, 'stock_after' => $p->stock, 'note' => $sale->invoice_number, 'occurred_at' => $sale->sold_at]);
+            StockMovement::create(['product_id' => $id, 'user_id' => $actor->id, 'sale_id' => $sale->id, 'type' => 'sale', 'quantity' => -$qty, 'stock_after' => $p->stock, 'note' => $sale->invoice_number, 'occurred_at' => $sale->status === 'paid' ? $sale->sold_at : now()]);
         }
     }
 }

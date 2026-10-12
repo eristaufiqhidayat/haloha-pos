@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SaleBill;
 use App\Services\SaleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -16,6 +17,9 @@ class PosController extends Controller
         if ($order) {
             $this->ownOrder($r, $order);
             abort_unless($order->status === 'pending', 409);
+            if ($order->hasPaidBill()) {
+                return redirect()->route('orders.bills', $order)->withErrors(['order' => 'Sebagian tagihan sudah lunas. Pesanan tidak dapat diubah.']);
+            }
             $order->load('items');
         }
         $catalogUser = $order?->user ?? $r->user();
@@ -51,7 +55,7 @@ class PosController extends Controller
 
     public function orders(Request $r)
     {
-        $orders = Sale::with('items', 'user')->where('status', 'pending')
+        $orders = Sale::with('items', 'user', 'bills')->where('status', 'pending')
             ->when(! $r->user()->role->is_system, fn ($q) => $q->where('user_id', $r->user()->id))
             ->orderBy('created_at')->get();
         return view('pos.orders', compact('orders'));
@@ -70,21 +74,100 @@ class PosController extends Controller
         if ($order->status === 'paid') {
             return redirect()->route('sales.show', $order);
         }
+        if ($order->isSplit()) {
+            return redirect()->route('orders.bills', $order);
+        }
         $order->load('items');
-        return view('pos.payment', compact('order'));
+        return view('pos.payment', ['order' => $order, 'bill' => null, 'payTotal' => $order->total, 'action' => route('orders.pay', $order)]);
     }
 
     public function pay(Request $r, Sale $order, SaleService $service)
     {
         $this->ownOrder($r, $order);
-        $data = $r->validate([
+        $sale = $service->payPending($r->user(), $order, $this->paymentData($r));
+        return redirect()->route('sales.show', $sale)->with('success', 'Pembayaran tercatat.');
+    }
+
+    private function paymentData(Request $r): array
+    {
+        return $r->validate([
             'payments' => 'required|array|min:1|max:4', 'payments.*.method' => 'required|distinct|in:cash,qris,transfer,debit',
             'payments.*.amount' => 'required|integer|min:0|max:1000000000000',
             'payments.*.paid_amount' => 'nullable|integer|min:0|max:1000000000000',
             'payments.*.confirmed' => 'nullable|boolean',
         ]);
-        $sale = $service->payPending($r->user(), $order, $data);
-        return redirect()->route('sales.show', $sale)->with('success', 'Pembayaran tercatat.');
+    }
+
+    public function splitForm(Request $r, Sale $order)
+    {
+        $this->ownOrder($r, $order);
+        $order->load('items', 'bills.items');
+        if ($order->status !== 'pending' || $order->bills->contains->isPaid()) {
+            return redirect()->route($order->status === 'paid' ? 'sales.show' : 'orders.bills', $order);
+        }
+        // Editor memakai baris menu gabungan; pembagian lama (jika ada) dimuat sebagai nilai awal.
+        $items = $order->items->groupBy->splitKey()->map(fn ($rows) => [
+            'key' => $rows->first()->splitKey(), 'name' => $rows->first()->product_name, 'notes' => $rows->first()->notes, 'price' => $rows->first()->unit_price,
+            'qty' => (int) $rows->sum('quantity'), 'alloc' => $rows->filter->sale_bill_id->groupBy(fn ($i) => $order->bills->firstWhere('id', $i->sale_bill_id)->number)->map->sum('quantity'),
+        ])->values();
+        return view('pos.split', ['order' => $order, 'items' => $items, 'max' => SaleBill::MAX]);
+    }
+
+    public function storeSplit(Request $r, Sale $order, SaleService $service)
+    {
+        $this->ownOrder($r, $order);
+        $data = $r->validate([
+            'mode' => 'required|in:item,equal', 'count' => 'required|integer|min:2|max:'.SaleBill::MAX,
+            'labels' => 'nullable|array|max:'.SaleBill::MAX, 'labels.*' => 'nullable|string|max:40',
+            'alloc' => 'required_if:mode,item|array', 'alloc.*' => 'array', 'alloc.*.*' => 'integer|min:0|max:10000',
+        ]);
+        $service->split($r->user(), $order, $data);
+        return redirect()->route('orders.bills', $order)->with('success', 'Pesanan dibagi menjadi '.$data['count'].' tagihan.');
+    }
+
+    public function destroySplit(Request $r, Sale $order, SaleService $service)
+    {
+        $this->ownOrder($r, $order);
+        $service->unsplit($r->user(), $order);
+        return redirect()->route('orders.index')->with('success', 'Pembagian tagihan dibatalkan.');
+    }
+
+    public function bills(Request $r, Sale $order)
+    {
+        $this->ownOrder($r, $order);
+        $order->load('bills.items', 'bills.payments', 'items');
+        if (! $order->isSplit()) {
+            return redirect()->route($order->status === 'paid' ? 'sales.show' : 'orders.index', $order->status === 'paid' ? [$order] : []);
+        }
+        return view('pos.bills', compact('order'));
+    }
+
+    public function billPayment(Request $r, Sale $order, int $number)
+    {
+        $this->ownOrder($r, $order);
+        $bill = $order->bills()->where('number', $number)->with('items')->firstOrFail();
+        if ($bill->isPaid()) {
+            return redirect()->route('sales.bill', [$order, $number]);
+        }
+        $order->load('items');
+        return view('pos.payment', ['order' => $order, 'bill' => $bill, 'payTotal' => $bill->total, 'action' => route('orders.bills.pay', [$order, $number])]);
+    }
+
+    public function payBill(Request $r, Sale $order, int $number, SaleService $service)
+    {
+        $this->ownOrder($r, $order);
+        $bill = $service->payBill($r->user(), $order, $number, $this->paymentData($r));
+        return redirect()->route('sales.bill', [$order, $bill->number])->with('success', $bill->title().' lunas.');
+    }
+
+    public function billReceipt(Request $r, Sale $sale, int $number)
+    {
+        abort_unless($r->user()->hasPermission('sales.view') || ($r->user()->hasPermission('pos.view') && $sale->user_id === $r->user()->id), 403);
+        $sale->load('user', 'bills');
+        $bill = $sale->bills->firstWhere('number', $number) ?? abort(404);
+        abort_unless($bill->isPaid(), 404);
+        $bill->load('items', 'payments');
+        return view('sales.bill', compact('sale', 'bill'));
     }
 
     public function kitchen(Request $r, Sale $order, string $station = 'dapur')

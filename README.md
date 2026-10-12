@@ -82,6 +82,10 @@ Password awal mengikuti `POS_SEED_PASSWORD` (contoh: `Haloha123!`). Ganti sebelu
 5. Struk dapat dicetak. Stok dan laporan langsung mengikuti transaksi.
 6. Pilih tanggal untuk laporan penjualan/stok dan unduh CSV sesuai izin.
 
+### Split bill
+
+Dari Pesanan Berjalan, tombol **Split bill** membagi satu pesanan menjadi 2–15 tagihan, **per item** (porsi menu dipindah ke tagihan) atau **bagi rata**. Diskon dan pajak dibagi proporsional dengan pembulatan yang jumlahnya selalu sama dengan total pesanan. Tiap tagihan dibayar di layar Bayar biasa (boleh kombinasi metode) dan dicetak sebagai struk sendiri (`INV-…-T2`). Stok dipotong saat tagihan pertama lunas; pesanan masuk laporan sebagai satu transaksi saat tagihan terakhir lunas. Pembagian dan Ubah/Notes terkunci setelah ada tagihan lunas; mengubah pesanan sebelum itu akan menghapus pembagian.
+
 Hak akses diperiksa pada middleware/controller, bukan hanya disembunyikan di menu. Kasir dapat melihat struk miliknya; kategori dengan `sales.view` dapat melihat seluruh struk. Akun tanpa izin akan diarahkan ke halaman tanpa akses.
 
 ## Struktur kode

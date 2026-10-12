@@ -36,10 +36,17 @@ return view('no-access');
     Route::put('/orders/{order}', [PosController::class, 'update'])->middleware('permission:pos.create')->name('orders.update');
     Route::get('/orders/{order}/payment', [PosController::class, 'payment'])->middleware('permission:pos.create')->name('orders.payment');
     Route::post('/orders/{order}/payment', [PosController::class, 'pay'])->middleware('permission:pos.create')->name('orders.pay');
+    Route::get('/orders/{order}/split', [PosController::class, 'splitForm'])->middleware('permission:pos.create')->name('orders.split');
+    Route::post('/orders/{order}/split', [PosController::class, 'storeSplit'])->middleware('permission:pos.create')->name('orders.split.store');
+    Route::delete('/orders/{order}/split', [PosController::class, 'destroySplit'])->middleware('permission:pos.create')->name('orders.split.destroy');
+    Route::get('/orders/{order}/bills', [PosController::class, 'bills'])->middleware('permission:pos.view')->name('orders.bills');
+    Route::get('/orders/{order}/bills/{number}/payment', [PosController::class, 'billPayment'])->middleware('permission:pos.create')->whereNumber('number')->name('orders.bills.payment');
+    Route::post('/orders/{order}/bills/{number}/payment', [PosController::class, 'payBill'])->middleware('permission:pos.create')->whereNumber('number')->name('orders.bills.pay');
     Route::get('/orders/{order}/kitchen/{station?}', [PosController::class, 'kitchen'])->middleware('permission:pos.view')->name('orders.kitchen');
     Route::get('/users/{user}/access', [UserAccessController::class, 'edit'])->middleware('permission:users.update')->name('users.access');
     Route::put('/users/{user}/access', [UserAccessController::class, 'update'])->middleware('permission:users.update')->name('users.access.update');
     Route::get('/sales/{sale}', [PosController::class, 'show'])->name('sales.show');
+    Route::get('/sales/{sale}/bills/{number}', [PosController::class, 'billReceipt'])->whereNumber('number')->name('sales.bill');
     foreach (['products' => ProductController::class, 'users' => UserController::class, 'roles' => RoleController::class] as $resource => $controller) {
         Route::resource($resource, $controller)->except('show')->middlewareFor('index', 'permission:'.$resource.'.view')->middlewareFor(['create', 'store'], 'permission:'.$resource.'.create')->middlewareFor(['edit', 'update'], 'permission:'.$resource.'.update')->middlewareFor('destroy', 'permission:'.$resource.'.delete');
     }
