@@ -16,7 +16,7 @@
 <td>
 <b>{{ $sale->invoice_number }}</b>
 <br>
-<small>{{ $sale->sold_at->format('H:i') }}</small>
+<small>{{ $sale->sold_at->format(($showDate ?? false) ? 'd/m/Y H:i' : 'H:i') }}</small>
 </td>
 <td>{{ $sale->cashier_name ?? $sale->user->name }}</td>
 <td>{{ $sale->items->sum('quantity') }}</td>
@@ -27,7 +27,7 @@
 </td>
 <td>@permission('sales.view')<a class="btn" href="{{ route('sales.show',$sale) }}">Struk</a>@endpermission</td>
 </tr>@empty<tr>
-<td colspan="7">Belum ada transaksi pada tanggal ini.</td>
+<td colspan="7">{{ $emptyText ?? 'Belum ada transaksi pada tanggal ini.' }}</td>
 </tr>@endforelse</tbody>
 </table>
 </div>
