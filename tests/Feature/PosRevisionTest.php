@@ -118,6 +118,23 @@ class PosRevisionTest extends TestCase
         $this->assertDatabaseCount('sales', 2);
     }
 
+    public function test_kitchen_tickets_split_between_dapur_and_dapur_2(): void
+    {
+        $food = Product::where('sku', 'HL-001')->firstOrFail();
+        $tea = Product::create(['category_id' => $food->category_id, 'sku' => 'TT-001', 'name' => 'Thai Tea Large (22 oz)', 'selling_price' => 10000, 'cost_price' => 4000, 'minimum_stock' => 0, 'is_active' => true]);
+        $tea->forceFill(['stock' => 50])->save();
+        $sale = $this->pending(['items' => [['product_id' => $food->id, 'quantity' => 2, 'notes' => 'Tidak pedas'], ['product_id' => $tea->id, 'quantity' => 1, 'notes' => 'Less ice']]]);
+        $this->actingAs($this->cashier());
+        $this->get(route('orders.index'))->assertSee(route('orders.kitchen', [$sale, 'dapur']))->assertSee(route('orders.kitchen', [$sale, 'dapur2']))->assertSee('Cetak dapur 2');
+        $this->get(route('orders.kitchen', $sale))->assertOk()->assertSee('PESANAN DAPUR')->assertSee($food->name)->assertSee('Thai Tea Large')->assertDontSee('Rp ');
+        $this->get(route('orders.kitchen', [$sale, 'dapur2']))->assertOk()->assertSee('PESANAN DAPUR 2')->assertSee('Thai Tea Large')->assertSee('Less ice')->assertDontSee($food->name)->assertDontSee('Tidak pedas')->assertDontSee('Rp ');
+        $this->get(route('orders.kitchen', [$sale, 'dapur3']))->assertNotFound();
+
+        $plain = $this->pending();
+        $this->get(route('orders.index'))->assertSee(route('orders.kitchen', [$plain, 'dapur']))->assertDontSee(route('orders.kitchen', [$plain, 'dapur2']));
+        $this->get(route('orders.kitchen', [$plain, 'dapur2']))->assertOk()->assertSee('Tidak ada menu untuk Dapur 2')->assertDontSee('window.print()', false);
+    }
+
     public function test_guest_table_takeaway_ownership_and_pending_views(): void
     {
         $sale = $this->pending(['takeaway' => true, 'table_number' => '99']);
