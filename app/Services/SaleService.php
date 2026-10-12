@@ -321,7 +321,7 @@ class SaleService
         if ($rows === null) {
             // Keep the previous single-method endpoint compatible.
             $method = $data['payment_method'];
-            $rows = [['method' => $method, 'amount' => $total, 'paid_amount' => $method === 'cash' ? (int) ($data['paid_amount'] ?? 0) : $total, 'confirmed' => $data['confirmed'] ?? true]];
+            $rows = [['method' => $method, 'amount' => $total, 'paid_amount' => $method === 'cash' ? (int) ($data['paid_amount'] ?? 0) : $total]];
         }
         $seen = [];
         $result = [];
@@ -331,9 +331,6 @@ class SaleService
             $amount = (int) $row['amount'];
             if (! in_array($method, ['cash', 'qris', 'transfer', 'debit'], true) || isset($seen[$method]) || $amount < 0 || ($total > 0 && $amount === 0)) {
                 throw ValidationException::withMessages(['payments' => 'Pilih metode unik dengan nominal pembayaran positif.']);
-            }
-            if ($method !== 'cash' && $amount > 0 && ! in_array($row['confirmed'] ?? false, [true, 1, '1', 'yes', 'on', 'true'], true)) {
-                throw ValidationException::withMessages(['payments' => 'Konfirmasi pembayaran '.$method.' diterima.']);
             }
             $paid = $method === 'cash' ? (int) ($row['paid_amount'] ?? 0) : $amount;
             if ($paid < $amount) {

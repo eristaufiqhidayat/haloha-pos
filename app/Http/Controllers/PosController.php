@@ -41,7 +41,7 @@ class PosController extends Controller
             'discount_enabled' => 'nullable|boolean', 'discount' => 'nullable|integer|min:0|max:1000000000000',
             'tax_enabled' => 'nullable|boolean', 'tax_rate' => 'nullable|integer|min:0|max:100',
             'payment_method' => ($pending ? 'nullable' : 'required').'|in:cash,qris,transfer,debit',
-            'paid_amount' => 'nullable|integer|min:0|max:1000000000000', 'confirmed' => $pending ? 'nullable' : 'accepted',
+            'paid_amount' => 'nullable|integer|min:0|max:1000000000000', 'confirmed' => 'nullable',
         ]);
     }
 
