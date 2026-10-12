@@ -36,7 +36,7 @@ return view('no-access');
     Route::put('/orders/{order}', [PosController::class, 'update'])->middleware('permission:pos.create')->name('orders.update');
     Route::get('/orders/{order}/payment', [PosController::class, 'payment'])->middleware('permission:pos.create')->name('orders.payment');
     Route::post('/orders/{order}/payment', [PosController::class, 'pay'])->middleware('permission:pos.create')->name('orders.pay');
-    Route::get('/orders/{order}/kitchen', [PosController::class, 'kitchen'])->middleware('permission:pos.view')->name('orders.kitchen');
+    Route::get('/orders/{order}/kitchen/{station?}', [PosController::class, 'kitchen'])->middleware('permission:pos.view')->name('orders.kitchen');
     Route::get('/users/{user}/access', [UserAccessController::class, 'edit'])->middleware('permission:users.update')->name('users.access');
     Route::put('/users/{user}/access', [UserAccessController::class, 'update'])->middleware('permission:users.update')->name('users.access.update');
     Route::get('/sales/{sale}', [PosController::class, 'show'])->name('sales.show');

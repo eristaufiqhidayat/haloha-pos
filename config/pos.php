@@ -2,6 +2,11 @@
 
 return [
     'receipt' => ['name' => 'Haloha Kitchen', 'address' => 'Jl. Malaka Baru 4A – Pd Kopi', 'phone' => '0813 6000 9898'],
+    // Tujuan cetak dapur. 'keywords' kosong = semua menu; selain itu hanya item yang namanya memuat salah satu kata kunci.
+    'kitchen_stations' => [
+        'dapur' => ['label' => 'Dapur', 'keywords' => []],
+        'dapur2' => ['label' => 'Dapur 2', 'keywords' => ['thai tea']],
+    ],
     'modules' => [
         'dashboard' => ['label' => 'Dashboard', 'actions' => ['view' => 'Lihat']],
         'pos' => ['label' => 'Kasir / POS', 'actions' => ['view' => 'Lihat', 'create' => 'Transaksi']],

@@ -27,4 +27,16 @@ class Sale extends Model
     {
         return $this->hasMany(SaleItem::class);
     }
+
+    public static function kitchenStation(string $key): ?array
+    {
+        $station = config("pos.kitchen_stations.$key");
+        return $station ? $station + ['key' => $key] : null;
+    }
+
+    public function kitchenItems(array $station)
+    {
+        $keywords = array_map('mb_strtolower', $station['keywords'] ?? []);
+        return $this->items->filter(fn ($i) => $keywords === [] || collect($keywords)->contains(fn ($k) => str_contains(mb_strtolower($i->product_name), $k)))->values();
+    }
 }

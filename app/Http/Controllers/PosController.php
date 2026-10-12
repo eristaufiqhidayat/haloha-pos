@@ -87,11 +87,12 @@ class PosController extends Controller
         return redirect()->route('sales.show', $sale)->with('success', 'Pembayaran tercatat.');
     }
 
-    public function kitchen(Request $r, Sale $order)
+    public function kitchen(Request $r, Sale $order, string $station = 'dapur')
     {
         $this->ownOrder($r, $order);
+        $station = Sale::kitchenStation($station) ?? abort(404);
         $order->load('items', 'user');
-        return view('sales.kitchen', ['sale' => $order]);
+        return view('sales.kitchen', ['sale' => $order, 'station' => $station, 'items' => $order->kitchenItems($station)]);
     }
 
     private function ownOrder(Request $r, Sale $order): void
