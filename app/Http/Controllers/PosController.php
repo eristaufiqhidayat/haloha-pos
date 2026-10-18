@@ -74,7 +74,25 @@ class PosController extends Controller
         $orders = Sale::with('items', 'user', 'bills')->where('status', 'pending')
             ->when(! $r->user()->role->is_system, fn ($q) => $q->where('user_id', $r->user()->id))
             ->orderBy('created_at')->get();
-        return view('pos.orders', compact('orders'));
+        Sale::expireGuestOrders();
+        // Pesanan dari QR meja belum punya kasir, jadi tampil untuk semua kasir.
+        $incoming = Sale::with('items')->where('status', 'incoming')->orderBy('created_at')->get();
+        return view('pos.orders', compact('orders', 'incoming'));
+    }
+
+    public function acceptGuest(Request $r, Sale $order, SaleService $service)
+    {
+        $qris = $r->input('as') === 'qris';
+        $sale = $service->acceptGuestOrder($r->user(), $order, $qris);
+        return $qris
+            ? redirect()->route('sales.show', $sale)->with('success', 'Pembayaran QRIS Meja '.$sale->table_number.' tercatat. Cetak tiket dapur sekarang.')
+            : redirect()->route('orders.index')->with('success', 'Pesanan Meja '.$sale->table_number.' dikonfirmasi. Cetak dapur lalu bayar di kasir.');
+    }
+
+    public function rejectGuest(Sale $order, SaleService $service)
+    {
+        $service->rejectGuestOrder($order);
+        return redirect()->route('orders.index')->with('success', 'Pesanan Meja '.$order->table_number.' ditolak.');
     }
 
     public function update(Request $r, Sale $order, SaleService $service)
