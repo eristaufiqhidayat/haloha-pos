@@ -15,6 +15,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Blade::if('permission', fn (string $code) => auth()->user()?->hasPermission($code) ?? false);
+        RateLimiter::for('qr-order', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
     }
 }

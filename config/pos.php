@@ -7,11 +7,14 @@ return [
         'dapur' => ['label' => 'Dapur', 'keywords' => []],
         'dapur2' => ['label' => 'Dapur 2', 'keywords' => ['thai tea']],
     ],
+    // Pesan dari meja via QR: pesanan QRIS yang belum dibayar/diklaim tamu batal otomatis setelah sekian menit.
+    'qr_order' => ['qris_expire_minutes' => 30],
     'modules' => [
         'dashboard' => ['label' => 'Dashboard', 'actions' => ['view' => 'Lihat']],
         'pos' => ['label' => 'Kasir / POS', 'actions' => ['view' => 'Lihat', 'create' => 'Transaksi']],
         'products' => ['label' => 'Produk', 'actions' => ['view' => 'Lihat', 'create' => 'Tambah', 'update' => 'Ubah', 'delete' => 'Arsipkan']],
         'categories' => ['label' => 'Kategori Produk', 'actions' => ['view' => 'Lihat', 'create' => 'Tambah', 'update' => 'Ubah', 'delete' => 'Hapus']],
+        'tables' => ['label' => 'Meja & QR', 'actions' => ['view' => 'Lihat', 'create' => 'Tambah', 'update' => 'Ubah', 'delete' => 'Hapus']],
         'stock' => ['label' => 'Stok', 'actions' => ['view' => 'Lihat', 'create' => 'Stok masuk']],
         'sales' => ['label' => 'Laporan Penjualan', 'actions' => ['view' => 'Lihat', 'export' => 'Ekspor']],
         'inventory' => ['label' => 'Laporan Stok', 'actions' => ['view' => 'Lihat', 'export' => 'Ekspor']],

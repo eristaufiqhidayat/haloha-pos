@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\DiningTable;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleBill;
@@ -192,6 +193,80 @@ class SaleService
         }, 3);
     }
 
+    /**
+     * Pesanan tamu dari QR meja. Masuk sebagai 'incoming' tanpa kasir dan tanpa memotong stok;
+     * kasir mengonfirmasi (bayar di kasir) atau mencocokkan dana QRIS lebih dulu.
+     */
+    public function placeGuestOrder(DiningTable $table, array $data): Sale
+    {
+        return DB::transaction(function () use ($table, $data) {
+            $existing = Sale::where('checkout_token', $data['checkout_token'])->first();
+            if ($existing) {
+                abort_unless($existing->source === 'qr' && $existing->dining_table_id === $table->id, 409);
+                return $existing;
+            }
+            $qris = ($data['qr_payment'] ?? null) === 'qris';
+            $data = ['table_number' => $table->number, 'takeaway' => false, 'discount_enabled' => false, 'tax_enabled' => false]
+                + array_intersect_key($data, array_flip(['checkout_token', 'items', 'guest_name']));
+            $data['items'] = array_map(fn ($row) => ['takeaway' => false] + $row, $data['items']);
+            [$fields, $items] = $this->snapshot(null, $data);
+            $sale = $this->createSale(null, $data, $fields + [
+                'source' => 'qr', 'dining_table_id' => $table->id, 'qr_payment' => $qris ? 'qris' : 'cashier',
+                // Kode unik 1–99 rupiah membedakan pesanan bertotal sama di mutasi QRIS.
+                'qris_code' => $qris ? random_int(1, 99) : 0,
+            ], 'incoming');
+            $sale->items()->createMany($items);
+            return $sale->load('items');
+        }, 3);
+    }
+
+    public function claimGuestPayment(Sale $order): Sale
+    {
+        return DB::transaction(function () use ($order) {
+            $sale = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($sale->status === 'incoming' && $sale->qr_payment === 'qris' && ! $sale->qris_claimed_at) {
+                $sale->update(['qris_claimed_at' => now()]);
+            }
+            return $sale;
+        }, 3);
+    }
+
+    /**
+     * Kasir menerima pesanan QR. Bayar di kasir menjadi pesanan berjalan milik kasir;
+     * QRIS yang dananya sudah dicek langsung lunas dan memotong stok.
+     */
+    public function acceptGuestOrder(User $actor, Sale $order, bool $qrisReceived): Sale
+    {
+        return DB::transaction(function () use ($actor, $order, $qrisReceived) {
+            User::whereKey($actor->id)->lockForUpdate()->firstOrFail();
+            $sale = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($sale->status !== 'incoming') {
+                throw ValidationException::withMessages(['order' => 'Pesanan ini sudah diproses kasir lain.']);
+            }
+            $sale->update(['user_id' => $actor->id, 'cashier_name' => $actor->name, 'confirmed_at' => now()]
+                + ($qrisReceived ? [] : ['status' => 'pending', 'qr_payment' => 'cashier', 'qris_code' => 0]));
+            if ($qrisReceived) {
+                if ($sale->qr_payment !== 'qris') {
+                    throw ValidationException::withMessages(['order' => 'Pesanan ini dibayar di kasir.']);
+                }
+                $paid = $sale->total + $sale->qris_code;
+                $this->settle($sale, [['method' => 'qris', 'amount' => $sale->total, 'paid_amount' => $paid, 'change_amount' => 0]], $actor);
+            }
+            return $sale->load('items', 'payments');
+        }, 3);
+    }
+
+    public function rejectGuestOrder(Sale $order): void
+    {
+        DB::transaction(function () use ($order) {
+            $sale = Sale::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($sale->status !== 'incoming') {
+                throw ValidationException::withMessages(['order' => 'Pesanan ini sudah diproses kasir lain.']);
+            }
+            $sale->update(['status' => 'cancelled']);
+        }, 3);
+    }
+
     /** Bagi $total ke bobot dengan metode sisa terbesar; hasil selalu berjumlah tepat $total. */
     public static function allocate(int $total, array $weights): array
     {
@@ -236,7 +311,7 @@ class SaleService
         $sale->update(['split_mode' => null]);
     }
 
-    private function snapshot(User $user, array $data): array
+    private function snapshot(?User $user, array $data): array
     {
         $rows = [];
         $quantities = [];
@@ -246,7 +321,8 @@ class SaleService
             $id = (int) $row['product_id'];
             $qty = (int) $row['quantity'];
             $notes = trim((string) ($row['notes'] ?? ''));
-            if (! $user->maySellProduct($id)) {
+            // Pesanan tamu dari QR (tanpa kasir) memakai seluruh menu aktif.
+            if ($user && ! $user->maySellProduct($id)) {
                 throw ValidationException::withMessages(['items' => 'Menu belum diizinkan oleh admin untuk kasir ini.']);
             }
             $takeaway = (bool) ($row['takeaway'] ?? $orderTakeaway);
@@ -294,12 +370,12 @@ class SaleService
         ], $items];
     }
 
-    private function createSale(User $user, array $data, array $fields, string $status): Sale
+    private function createSale(?User $user, array $data, array $fields, string $status): Sale
     {
         return Sale::create($fields + [
             'invoice_number' => $this->nextInvoiceNumber(),
-            'checkout_token' => $data['checkout_token'], 'user_id' => $user->id, 'cashier_name' => $user->name,
-            'sold_at' => now(), 'status' => $status, 'payment_method' => $status === 'pending' ? 'pending' : 'cash',
+            'checkout_token' => $data['checkout_token'], 'user_id' => $user?->id, 'cashier_name' => $user?->name,
+            'sold_at' => now(), 'status' => $status, 'payment_method' => $status === 'paid' ? 'cash' : 'pending',
             'paid_amount' => 0, 'change_amount' => 0,
         ]);
     }
